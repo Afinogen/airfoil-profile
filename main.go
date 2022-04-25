@@ -8,6 +8,7 @@ import (
 	"github.com/yofu/dxf/entity"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -150,6 +151,12 @@ func formatProfileName(name string) string {
 	return name
 }
 
+func formatFileName(name string) string {
+	name = strings.ReplaceAll(name, "/", "_")
+
+	return name
+}
+
 func searchOnSite(profileName string) (result []*ProfileInfo) {
 	page := 0
 	for {
@@ -224,7 +231,9 @@ func stringToInt(str string) int32 {
 }
 
 func getCoordinatesFromFile(profile *ProfileInfo) (coordinates []*Coordinate) {
-	profileFile, err := ioutil.ReadFile("./data/airfoil/" + profile.Title + ".dat")
+	fileName := profile.Title
+	fileName = strings.ReplaceAll(fileName, "/", "_")
+	profileFile, err := ioutil.ReadFile("./data/airfoil/" + fileName + ".dat")
 
 	if err != nil {
 		log.Fatal(err)
@@ -259,7 +268,8 @@ func prepareProfile(profile *ProfileInfo) {
 			log.Fatal(err)
 		}
 		profile.Content = profileConfig
-		saveToFile("./data/airfoil/"+profile.Title+".dat", profile.Content)
+
+		saveToFile("./data/airfoil/"+formatFileName(profile.Title)+".dat", profile.Content)
 		fmt.Println("Профиль сохранен локально")
 	}
 
@@ -277,14 +287,16 @@ func prepareProfile(profile *ProfileInfo) {
 		}
 
 		if profile.Thickness > 0 {
-			maxThickness := float32(0)
+			maxThickness := float64(0)
 
-			for _, coordinate := range coordinates {
-				if coordinate.Y > maxThickness {
-					maxThickness = coordinate.Y
+			for i := int32(0); i < profile.MaxX; i++ {
+				thickness := math.Abs(float64(coordinates[i].Y)) + math.Abs(float64(coordinates[profile.MaxX+i].Y))
+				if thickness > maxThickness {
+					maxThickness = thickness
 				}
 			}
-			percent := float32(profile.Thickness) * 100 / maxThickness
+
+			percent := float32(profile.Thickness) * 100 / float32(maxThickness)
 			for _, coordinate := range coordinates {
 				coordinate.Y *= percent / 100
 			}
@@ -305,7 +317,7 @@ func saveCoordinatesToCsv(coordinates []*Coordinate, profile *ProfileInfo) {
 		content += fmt.Sprintf("%.6f,%.6f\n", coordinates[i].X, coordinates[i].Y)
 	}
 
-	fileName := fmt.Sprintf("./data/output/%s_%d_%d.csv", formatProfileName(profile.Title), profile.ChordWidth, profile.Thickness)
+	fileName := fmt.Sprintf("./data/output/%s_%d_%d.csv", formatFileName(formatProfileName(profile.Title)), profile.ChordWidth, profile.Thickness)
 	saveToFile(fileName, content)
 	fmt.Println("CSV сохранен в " + fileName)
 }
@@ -327,13 +339,13 @@ func saveCoordinatesToDxf(coordinates []*Coordinate, profile *ProfileInfo) {
 	p.Close()
 	d.AddEntity(p)
 
-	fileName := fmt.Sprintf("./data/output/%s_%d_%d.dxf", formatProfileName(profile.Title), profile.ChordWidth, profile.Thickness)
+	fileName := fmt.Sprintf("./data/output/%s_%d_%d.dxf", formatFileName(formatProfileName(profile.Title)), profile.ChordWidth, profile.Thickness)
 	d.SaveAs(fileName)
 	fmt.Println("DXF сохранен в " + fileName)
 }
 
 func main() {
-	fmt.Println("Рассчет профиля крыла")
+	fmt.Println("Расчет профиля крыла")
 	preRunCheck()
 
 	isLocal := true
